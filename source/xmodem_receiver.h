@@ -9,6 +9,8 @@ enum XMODEM_RECEIVE_STATES {XMODEM_RECEIVE_INITIAL,
                             XMODEM_RECEIVE_BLOCK_ACK,                 XMODEM_RECEIVE_BLOCK_VALID,
                             XMODEM_RECEIVE_UNKNOWN } typedef xmodem_receive_state_t;
 
+#define XMODEM_RECEIVE_BEGIN_TRANSFER_RETRIES (5)
+#define XMODEM_RECEIVE_BEGIN_TRANSFER_TIMEOUT (3000)
 
 xmodem_receive_state_t xmodem_receive_state();
 

@@ -1251,7 +1251,7 @@ TEST_F(XModemTests, XMODEM_RECEIVE_SUCCESS_READ_BLOCK)
 
 }
 
-TEST_F(XModemTests, XMODEM_RECEIVE_ABORT_TRANSFER)
+TEST_F(XModemTests, XMODEM_RECEIVE_ABORT_TRANSFER_TIMEOUT)
 {
   xmodem_receive_set_callback_write(&receiver_write_data);
   xmodem_receive_set_callback_read(&receiver_read_data);
@@ -1263,7 +1263,46 @@ TEST_F(XModemTests, XMODEM_RECEIVE_ABORT_TRANSFER)
 
   uint32_t timestamp = 0;
 
-  //TODO: Implement unit tests here
+  EXPECT_EQ(true, xmodem_receive_process(timestamp));
+  EXPECT_EQ(XMODEM_RECEIVE_SEND_C, xmodem_receive_state());
+  EXPECT_EQ(0, receiver_requested_outbound_size);
+
+  int retries = 0;
+  for (; retries < XMODEM_RECEIVE_BEGIN_TRANSFER_RETRIES + 1; retries++) {
+    // make sure the receiver sends a 'C'
+    // to start the transfer.
+    receiver_requested_outbound_size = 0;
+    memset(receiver_outbound_buffer, 0, sizeof(receiver_outbound_buffer)); 
+    EXPECT_EQ(true, xmodem_receive_process(timestamp));
+    EXPECT_EQ(XMODEM_RECEIVE_WAIT_FOR_ACK, xmodem_receive_state());
+    EXPECT_EQ(1, receiver_requested_outbound_size);
+    EXPECT_EQ('C', receiver_outbound_buffer[0]);
+    
+    // make sure the receiver waits XMODEM_RECEIVE_BEGIN_TRANSFER_TIMEOUT 
+    // milliseconds before retrying.
+    timestamp += XMODEM_RECEIVE_BEGIN_TRANSFER_TIMEOUT - 1;
+    receiver_requested_outbound_size = 0;
+    memset(receiver_outbound_buffer, 0, sizeof(receiver_outbound_buffer)); 
+    EXPECT_EQ(true, xmodem_receive_process(timestamp));
+    EXPECT_EQ(XMODEM_RECEIVE_WAIT_FOR_ACK, xmodem_receive_state());
+    EXPECT_EQ(0, receiver_requested_outbound_size);
+    
+    timestamp++;
+    EXPECT_EQ(true, xmodem_receive_process(timestamp));
+    EXPECT_EQ(XMODEM_RECEIVE_TIMEOUT_ACK, xmodem_receive_state());
+    EXPECT_EQ(0, receiver_requested_outbound_size);
+
+    // make sure the receiver retries the proper number of times.
+    timestamp++;
+    EXPECT_EQ(true, xmodem_receive_process(timestamp));
+    if (retries <= XMODEM_RECEIVE_BEGIN_TRANSFER_RETRIES) {
+      EXPECT_EQ(XMODEM_RECEIVE_SEND_C, xmodem_receive_state());
+    } else {
+      EXPECT_EQ(XMODEM_RECEIVE_ABORT_TRANSFER, xmodem_receive_state());
+      break;
+    }
+  }
+  EXPECT_EQ(XMODEM_RECEIVE_BEGIN_TRANSFER_RETRIES, retries);
 
   EXPECT_EQ(true, xmodem_receive_cleanup());
 }
