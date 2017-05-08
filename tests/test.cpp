@@ -5,6 +5,8 @@
 #include <string.h>
 #include "XModemTests.h"
 
+static const uint32_t RECEIVE_BEGIN_TRANSFER_TIMEOUT = 3000;
+static const uint8_t  RECEIVE_MAX_BEGIN_ATTEMPTS     = 6;
 
 static bool transmitter_is_inbound_empty()
 {
@@ -1261,22 +1263,22 @@ TEST_F(XModemTests, XMODEM_RECEIVE_ABORT_TRANSFER_TIMEOUT)
   EXPECT_EQ(true, xmodem_receive_init());
   EXPECT_EQ(XMODEM_RECEIVE_INITIAL, xmodem_receive_state());
 
-  uint32_t timestamp = 0;
+  uint32_t current_time = 0;
 
   // for this test, we assume no data ever arrives from the sender
   receiver_inbound_empty = true;
   
-  EXPECT_EQ(true, xmodem_receive_process(timestamp));
+  EXPECT_EQ(true, xmodem_receive_process(current_time));
   EXPECT_EQ(XMODEM_RECEIVE_SEND_C, xmodem_receive_state());
   EXPECT_EQ(0, receiver_requested_outbound_size);
 
   int tries = 0;
 
-  // try looping a few more times than expected 
-  // to detect failure to stop at the retry limit.
-  // NOTE: retries are attempts beyond the first one.
-  // E.g. 5 retries means 6 attempts; the first try and 5 retries.
-  for (; tries < XMODEM_RECEIVE_BEGIN_RETRIES + 3; tries++) {
+  // make sure we make 6 attempts to begin the transfer 
+  // (first try plus 5 retries.)
+  // (try looping a few more times than expected 
+  // to detect failure to stop at the attempt limit.)
+  for (tries = 1; tries <= RECEIVE_MAX_BEGIN_ATTEMPTS + 3; ++tries) {
 
     // make sure the receiver sends a 'C'
     // to start the transfer.
@@ -1284,29 +1286,29 @@ TEST_F(XModemTests, XMODEM_RECEIVE_ABORT_TRANSFER_TIMEOUT)
     memset(receiver_outbound_buffer, 0, sizeof(receiver_outbound_buffer)); 
     receiver_returned_write_success = true;
     
-    EXPECT_EQ(true, xmodem_receive_process(timestamp));
+    EXPECT_EQ(true, xmodem_receive_process(current_time));
     EXPECT_EQ(XMODEM_RECEIVE_WAIT_FOR_ACK, xmodem_receive_state());
     EXPECT_EQ(1, receiver_requested_outbound_size);
     EXPECT_EQ(0x43, receiver_outbound_buffer[0]);
     
-    // make sure the receiver waits XMODEM_RECEIVE_BEGIN_TIMEOUT 
+    // make sure the receiver waits 3000 
     // milliseconds before retrying.
-    timestamp += XMODEM_RECEIVE_BEGIN_TIMEOUT - 1;
+    current_time += RECEIVE_BEGIN_TRANSFER_TIMEOUT - 1;
     receiver_requested_outbound_size = 0;
     memset(receiver_outbound_buffer, 0, sizeof(receiver_outbound_buffer)); 
-    EXPECT_EQ(true, xmodem_receive_process(timestamp));
+    EXPECT_EQ(true, xmodem_receive_process(current_time));
     EXPECT_EQ(XMODEM_RECEIVE_WAIT_FOR_ACK, xmodem_receive_state());
     EXPECT_EQ(0, receiver_requested_outbound_size);
     
-    timestamp++;
-    EXPECT_EQ(true, xmodem_receive_process(timestamp));
+    ++current_time;
+    EXPECT_EQ(true, xmodem_receive_process(current_time));
     EXPECT_EQ(XMODEM_RECEIVE_TIMEOUT_ACK, xmodem_receive_state());
     EXPECT_EQ(0, receiver_requested_outbound_size);
 
     // make sure the receiver retries the proper number of times.
-    timestamp++;
-    EXPECT_EQ(true, xmodem_receive_process(timestamp));
-    if (tries <= XMODEM_RECEIVE_BEGIN_RETRIES) {
+    ++current_time;
+    EXPECT_EQ(true, xmodem_receive_process(current_time));
+    if (tries < RECEIVE_MAX_BEGIN_ATTEMPTS) {
       EXPECT_EQ(XMODEM_RECEIVE_SEND_C, xmodem_receive_state());
     } else {
       EXPECT_EQ(XMODEM_RECEIVE_ABORT_TRANSFER, xmodem_receive_state());
@@ -1314,7 +1316,7 @@ TEST_F(XModemTests, XMODEM_RECEIVE_ABORT_TRANSFER_TIMEOUT)
     }
   }
 
-  EXPECT_EQ(XMODEM_RECEIVE_BEGIN_RETRIES+1, tries);
+  EXPECT_EQ(RECEIVE_MAX_BEGIN_ATTEMPTS, tries);
   EXPECT_EQ(true, xmodem_receive_cleanup());
 }
 
