@@ -11,6 +11,8 @@ static bool (*callback_write_data)(const uint32_t requested_size, uint8_t *buffe
 
 static xmodem_receive_state_t receive_state;
 
+static const uint8_t   MAX_BEGIN_ATTEMPTS      = 6;
+static const uint32_t  BEGIN_TRANSFER_TIMEOUT  = 3000; // 3 seconds
 static const uint32_t  READ_BLOCK_TIMEOUT      = 60000; // 60 seconds
 static uint8_t         control_character       = 0;
 static uint32_t        returned_size           = 0;
@@ -66,14 +68,14 @@ bool xmodem_receive_cleanup()
 bool xmodem_receive_process(const uint32_t current_time)
 {
    static uint32_t stopwatch = 0;
-   static uint16_t retries = 0;
+   static uint16_t begin_count = 0;
 
    switch(receive_state)
    {
 
       case XMODEM_RECEIVE_INITIAL:
       {
-         retries = 0;
+         begin_count = 0;
          receive_state = XMODEM_RECEIVE_SEND_C;
          break;
       }
@@ -85,8 +87,9 @@ bool xmodem_receive_process(const uint32_t current_time)
          callback_write_data(sizeof(c), &c, &write_status);
          if (write_status) 
          {
-            receive_state = XMODEM_RECEIVE_WAIT_FOR_ACK;
             stopwatch = current_time;
+            ++begin_count;
+            receive_state = XMODEM_RECEIVE_WAIT_FOR_ACK;
          } 
          else 
          {
@@ -98,15 +101,16 @@ bool xmodem_receive_process(const uint32_t current_time)
 
       case XMODEM_RECEIVE_WAIT_FOR_ACK:
       {
-         if (XMODEM_RECEIVE_BEGIN_TIMEOUT > (current_time - stopwatch)) {
-            if (!callback_is_inbound_empty()) 
-            {
-               receive_state = XMODEM_RECEIVE_ACK_SUCCESS;
-            }
-         } 
-         else 
+         if (!callback_is_inbound_empty()) 
          {
-            receive_state = XMODEM_RECEIVE_TIMEOUT_ACK;
+            receive_state = XMODEM_RECEIVE_ACK_SUCCESS;
+         }
+         else
+         {
+            if (current_time >= (stopwatch + BEGIN_TRANSFER_TIMEOUT))
+            {
+               receive_state = XMODEM_RECEIVE_TIMEOUT_ACK;
+            }
          }
          break;
       }
@@ -120,9 +124,8 @@ bool xmodem_receive_process(const uint32_t current_time)
       case XMODEM_RECEIVE_TIMEOUT_ACK:
       { 
          //TODO: implement retry logic, if more than 5 retries goto ABORT_TRANSFER
-         if (XMODEM_RECEIVE_BEGIN_RETRIES >= retries)
+         if (MAX_BEGIN_ATTEMPTS > begin_count)
          {
-            retries++;
             receive_state = XMODEM_RECEIVE_SEND_C;
          }
          else 
