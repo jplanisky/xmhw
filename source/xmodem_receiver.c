@@ -66,31 +66,69 @@ bool xmodem_receive_cleanup()
 bool xmodem_receive_process(const uint32_t current_time)
 {
    static uint32_t stopwatch = 0;
+   static uint16_t retries = 0;
 
    switch(receive_state)
    {
 
       case XMODEM_RECEIVE_INITIAL:
       {
+         retries = 0;
          receive_state = XMODEM_RECEIVE_SEND_C;
          break;
       }
 
       case XMODEM_RECEIVE_SEND_C:
       {
-         receive_state = XMODEM_RECEIVE_WAIT_FOR_ACK;
+         uint8_t c = 0x43;
+         bool write_status;
+         callback_write_data(sizeof(c), &c, &write_status);
+         if (write_status) 
+         {
+            receive_state = XMODEM_RECEIVE_WAIT_FOR_ACK;
+            stopwatch = current_time;
+         } 
+         else 
+         {
+            //TODO: verify aborting on failed write is appropriate
+            receive_state = XMODEM_RECEIVE_ABORT_TRANSFER;
+         }
          break;
       }
 
       case XMODEM_RECEIVE_WAIT_FOR_ACK:
       {
-         //TODO: check time and transition on received ACK or timeout
+         if (XMODEM_RECEIVE_BEGIN_TIMEOUT > (current_time - stopwatch)) {
+            if (!callback_is_inbound_empty()) 
+            {
+               receive_state = XMODEM_RECEIVE_ACK_SUCCESS;
+            }
+         } 
+         else 
+         {
+            receive_state = XMODEM_RECEIVE_TIMEOUT_ACK;
+         }
          break;
       }
 
+      case XMODEM_RECEIVE_ACK_SUCCESS:
+      {
+         receive_state = XMODEM_RECEIVE_READ_BLOCK;
+         break;
+      }
+      
       case XMODEM_RECEIVE_TIMEOUT_ACK:
       { 
          //TODO: implement retry logic, if more than 5 retries goto ABORT_TRANSFER
+         if (XMODEM_RECEIVE_BEGIN_RETRIES >= retries)
+         {
+            retries++;
+            receive_state = XMODEM_RECEIVE_SEND_C;
+         }
+         else 
+         {
+            receive_state = XMODEM_RECEIVE_ABORT_TRANSFER;
+         }
          break;
       }
 
