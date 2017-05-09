@@ -13,8 +13,8 @@ sudo apt-get install build-essential socat lrzsz minicom ant openjdk-8-jdk git l
 Build and install libXMODEM
 --------------------------------
 ```bash
-git clone git@github.com:caseykelso/xmodem.git
-cd xmodem
+git clone git@github.com:jplanisky/xmhw.git
+cd xmhw
 mkdir build
 cd build
 cmake .. -DCMAKE_INSTALL_PREFIX=../installdirectory
@@ -41,9 +41,9 @@ sudo apt-get install build-essential socat lrzsz minicom ant git repo openjdk-8-
 Get Code
 -----------------
 ```bash
-mkdir xmodem
-cd xmodem
-repo init -m xmodem.xml -u git://github.com/caseykelso/xmodem.git
+mkdir xmhw
+cd xmhw
+repo init -m xmodem.xml -u git://github.com/jplanisky/xmhw.git
 repo sync
 ```
 
